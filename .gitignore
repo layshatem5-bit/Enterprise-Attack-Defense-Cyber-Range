@@ -22,3 +22,9 @@ Thumbs.db
 # scratch / generator working files (kept out of the repo on purpose)
 node_modules/
 *.log
+
+# Obsidian workspace config (per-machine, not shared)
+.obsidian/
+
+# Personal scratch notes (kept local)
+notes/
