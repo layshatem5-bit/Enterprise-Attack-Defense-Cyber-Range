@@ -41,6 +41,7 @@ vmware/     Step-by-step build guide for every machine
   05-ubuntu-splunk-siem.md     Splunk install, forwarders, log sources, dashboard
   06-caldera.md                Caldera install, agents, first purple-team test
 configs/    Copy-paste config reference (inputs.conf, netplan, dashboard queries, Caldera commands)
+detections/ Splunk detection rules, each mapped to MITRE ATT&CK with a test procedure
 ```
 
 ## Data flow
@@ -52,11 +53,22 @@ Ubuntu (system / auth logs) ───────────┘
 Caldera ──▶ PowerShell on target ──▶ Registry/behavior ──▶ Sysmon ──▶ Splunk
 ```
 
+## Detections
+
+Four detection rules are built for the Splunk SIEM, spanning four different attack tactics and each mapped to MITRE ATT&CK with a safe test procedure — see `detections/`:
+
+| Detection | Tactic | ATT&CK |
+|---|---|---|
+| Registry Run Key Persistence | Persistence | T1547.001 |
+| Suspicious / Encoded PowerShell | Execution, Defense Evasion | T1059.001, T1027 |
+| LSASS Credential Access | Credential Access | T1003.001 |
+| Privileged Group Modification | Privilege Escalation, Persistence | T1098, T1078.002 |
+
 ## Status
 
-Base lab complete: AD stood up, network fully segmented, Sysmon on all Windows hosts, Splunk collecting Windows/firewall/Ubuntu logs, dashboard live, and Caldera proven end to end (a Registry persistence technique executed and confirmed as Sysmon Event ID 13 in Splunk).
+Base lab complete: AD stood up, network fully segmented, Sysmon on all Windows hosts, Splunk collecting Windows/firewall/Ubuntu logs, dashboard live, and Caldera proven end to end (a Registry persistence technique executed and confirmed as Sysmon Event ID 13 in Splunk). First detection rules written and mapped to ATT&CK.
 
-Next: build out full purple-team scenarios (APT emulation, ransomware, insider threat), each documented as its own Incident Response report, and add permanent field extractions and alerts.
+Next: run each detection through the purple-team loop (execute the technique, confirm the alert fires, close any gap), then build out full attack scenarios (APT emulation, ransomware, insider threat), each documented as its own Incident Response report.
 
 ## Security note
 
