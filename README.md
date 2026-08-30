@@ -68,9 +68,9 @@ Four detection rules are built for the Splunk SIEM, spanning four different atta
 
 Base lab complete: AD stood up, network fully segmented, Sysmon on all Windows hosts, Splunk collecting Windows/firewall/Ubuntu logs, dashboard live, and Caldera proven end to end.
 
-**Detection 01 (Registry Run Key Persistence) is deployed as a live scheduled alert and validated through the full purple-team loop** — a technique run from Caldera fired the alert automatically in Splunk (Caldera → PowerShell → Registry → Sysmon → Splunk → Alert). Rules 02–04 are written and ready to deploy the same way.
+**Detections 01 (Registry Run Key Persistence) and 02 (Suspicious / Encoded PowerShell) are deployed as live scheduled alerts and validated through the full purple-team loop** — a technique run from Caldera fires the alert automatically in Splunk (Caldera → PowerShell → Registry/behavior → Sysmon → Splunk → Alert). Rule 02 also surfaces the C2 origin: its `ParentImage` chain showed the Caldera agent (`sandcat.exe`) spawning the encoded PowerShell. Rules 03–04 are written and ready to deploy the same way.
 
-Next: deploy and validate rules 02–04, standardise host naming (see below), then build out full attack scenarios (APT emulation, ransomware, insider threat), each documented as its own Incident Response report.
+Next: deploy and validate rules 03–04, standardise host naming (see below), then build out full attack scenarios (APT emulation, ransomware, insider threat), each documented as its own Incident Response report.
 
 ### Known cleanup item — host naming
 

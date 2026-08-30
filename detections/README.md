@@ -5,7 +5,7 @@ Detection content for the lab's Splunk SIEM. Each rule targets a specific attack
 | # | Detection | Tactic | ATT&CK | Data source | Severity | Status |
 |---|---|---|---|---|---|---|
 | 01 | [Registry Run Key Persistence](01-registry-run-key-persistence.md) | Persistence | T1547.001 | Sysmon EID 13 | High | **Deployed & validated** |
-| 02 | [Suspicious / Encoded PowerShell](02-suspicious-powershell.md) | Execution, Defense Evasion | T1059.001, T1027 | Sysmon EID 1 | High | Ready |
+| 02 | [Suspicious / Encoded PowerShell](02-suspicious-powershell.md) | Execution, Defense Evasion | T1059.001, T1027 | Sysmon EID 1 | High | **Deployed & validated** |
 | 03 | [LSASS Credential Access](03-lsass-credential-access.md) | Credential Access | T1003.001 | Sysmon EID 10 | Critical | Ready |
 | 04 | [Privileged Group Modification](04-privileged-group-modification.md) | Privilege Escalation, Persistence | T1098, T1078.002 | Windows Security 4728/4732/4756 | High | Ready |
 
