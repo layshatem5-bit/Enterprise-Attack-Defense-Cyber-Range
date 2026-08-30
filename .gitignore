@@ -1,0 +1,24 @@
+# Secrets / credentials — never commit
+*password*
+*credentials*
+*.pem
+*.key
+.env
+
+# VM disk/machine files — too large & not meant for git
+*.vmdk
+*.vmx
+*.vmxf
+*.nvram
+*.vmsd
+*.vmss
+*.vmem
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+
+# scratch / generator working files (kept out of the repo on purpose)
+node_modules/
+*.log
