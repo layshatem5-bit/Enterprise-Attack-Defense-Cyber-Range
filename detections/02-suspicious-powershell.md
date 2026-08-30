@@ -15,9 +15,12 @@ Pulling in `ParentImage` is what makes it strong: `winword.exe` or `excel.exe` s
 
 ## Search
 
+> Note: Sysmon data is indexed under the sourcetype `XmlWinEventLog`, and `EventCode=1` is emitted only by Sysmon — so the rule keys on `EventCode=1` and matches the image case-insensitively. (This is the same sourcetype/case fix that rule 01 needed after live testing.)
+
 ```spl
-index=main sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
-(Image="*\\powershell.exe" OR Image="*\\pwsh.exe")
+index=main EventCode=1
+| eval img=lower(Image)
+| where like(img,"%\\powershell.exe") OR like(img,"%\\pwsh.exe")
 | eval cl=lower(CommandLine)
 | eval s_encoded  = if(match(cl, "-enc|-encodedcommand|frombase64string"), 1, 0)
 | eval s_hidden   = if(match(cl, "-w hidden|-windowstyle hidden|-nop|-noprofile"), 1, 0)

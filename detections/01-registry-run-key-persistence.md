@@ -5,59 +5,75 @@
 | MITRE ATT&CK | T1547.001 — Boot or Logon Autostart Execution: Registry Run Keys |
 | Tactic | Persistence |
 | Data source | Sysmon Event ID 13 (Registry value set) — `index=main` |
-| Severity | Medium (High when the value points at a suspicious path) |
+| Severity | High |
+| Status | **Deployed and validated end-to-end (2026-08-30)** |
 
 ## What it detects
 
-Attackers keep access across reboots by writing an autorun entry into the registry — most commonly the `Run` / `RunOnce` keys or the Winlogon `Shell` / `Userinit` values. Sysmon records every registry value change as Event ID 13, so instead of alerting on "a registry key changed" (far too noisy), this rule watches only the handful of keys that actually control autostart, and scores the *value* that was written: an entry pointing at a user-writable path (AppData, Temp, Public, ProgramData) or a script interpreter is what a real payload looks like.
+Attackers keep access across reboots by writing an autorun entry into the registry — most commonly the `Run` / `RunOnce` keys or the Winlogon `Shell` / `Userinit` values. Sysmon records every registry value change as Event ID 13, so instead of alerting on "a registry key changed" (far too noisy), this rule watches only the keys that control autostart, then filters on the *value* that was written: an entry pointing at a user-writable path (Public, AppData, Temp, ProgramData) or a script interpreter is what a real payload looks like.
 
-This is the exact technique proven end-to-end in the first Caldera test, so it's the natural first detection to stand up.
+The reason the value filter matters: the Run keys are written constantly by legitimate software (Microsoft Edge auto-launch, updaters, cleanup tasks) whose values point into `Program Files`. Without the filter the rule returns dozens of benign entries. Filtering the value down to user-writable locations and script interpreters removes that noise and leaves only the genuinely suspicious autorun entries.
 
-## Search
+## Two lessons from validating against live data
+
+The first draft of this rule returned zero results. Two things had to be corrected after looking at a real event:
+
+1. **Sourcetype.** The Sysmon data is indexed under the sourcetype `XmlWinEventLog`, not the longer `XmlWinEventLog:Microsoft-Windows-Sysmon/Operational`. The rule now keys on `EventCode=13`, which only Sysmon emits, and drops the sourcetype filter.
+2. **Case and hive prefix.** Sysmon writes registry paths in uppercase with an `HKU\<SID>\` prefix — e.g. `HKU\S-1-5-21-...\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\Updater` — not `HKCU\...\Software\...`. All matching is therefore done case-insensitively with `lower()`.
+
+## Search (deployed alert)
 
 ```spl
-index=main sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=13
-TargetObject IN (
-    "*\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\*",
-    "*\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce\\*",
-    "*\\Software\\Microsoft\\Windows\\CurrentVersion\\RunServices\\*",
-    "*\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\Shell",
-    "*\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\Userinit"
-)
-| eval risk=if(match(Details, "(?i)(\\\\Users\\\\Public\\\\|\\\\AppData\\\\|\\\\Temp\\\\|\\\\ProgramData\\\\|\.ps1|powershell|pwsh|mshta|wscript|cscript|rundll32|regsvr32|\.vbs|\.bat|\.hta|\.js)"), "HIGH", "REVIEW")
-| stats min(_time) as firstTime max(_time) as lastTime count by host, User, Image, TargetObject, Details, risk
+index=main EventCode=13
+| eval to=lower(TargetObject), dt=lower(Details)
+| where like(to,"%\\currentversion\\run\\%") OR like(to,"%\\currentversion\\runonce\\%") OR like(to,"%\\currentversion\\runservices\\%") OR like(to,"%\\winlogon\\shell") OR like(to,"%\\winlogon\\userinit")
+| where match(dt,"(users.public|.appdata.|.temp.|programdata|.ps1|.vbs|.bat|.hta|mshta|wscript|cscript|rundll32|regsvr32)")
+| stats min(_time) as firstTime max(_time) as lastTime count by host, User, Image, TargetObject, Details
 | convert ctime(firstTime) ctime(lastTime)
-| sort - risk, - lastTime
+| sort - lastTime
 ```
 
-`Details` is the value data that was written (the program that will run at logon). `Image` is the process that made the change, `User` the account it ran as.
+`Details` is the value that was written (the program that will run at logon); `Image` is the process that made the change; `User` the account it ran as.
 
-## Alert configuration
+### Hunting variant (triage, shows everything with a risk tag)
+
+To review *all* autorun writes rather than only the suspicious ones — useful for baselining — drop the second `where` and tag each row instead:
+
+```spl
+index=main EventCode=13
+| eval to=lower(TargetObject), dt=lower(Details)
+| where like(to,"%\\currentversion\\run\\%") OR like(to,"%\\currentversion\\runonce\\%") OR like(to,"%\\currentversion\\runservices\\%") OR like(to,"%\\winlogon\\shell") OR like(to,"%\\winlogon\\userinit")
+| eval risk=if(match(dt,"(users.public|.appdata.|.temp.|programdata|.ps1|.vbs|.bat|.hta|mshta|wscript|cscript|rundll32|regsvr32)"),"HIGH","REVIEW")
+| stats min(_time) as firstTime max(_time) as lastTime count by host, User, Image, TargetObject, Details, risk
+| convert ctime(firstTime) ctime(lastTime)
+| sort risk, - lastTime
+```
+
+## Alert configuration (as deployed)
 
 | Setting | Value |
 |---|---|
+| Permissions | Shared in App |
 | Type | Scheduled |
-| Schedule (cron) | `*/5 * * * *` |
-| Time range | Last 5 minutes |
-| Trigger | Number of results > 0 |
-| Throttle | By `host`, `TargetObject` for 1 hour (avoid duplicate alerts on the same entry) |
+| Schedule (cron) | `*/5 * * * *` (every 5 minutes) |
+| Time range | Last 15 minutes (deliberate overlap so no event is missed at a boundary) |
+| Trigger | Number of Results > 0, **For each result** |
+| Throttle | Suppress by `TargetObject` for 3600 seconds |
+| Action | Add to Triggered Alerts, Severity **High** |
 
-## How to test
+## Validation
 
-Run this on a target through Caldera (Manual Command) or a local PowerShell — it's the same technique as the first Caldera test:
-
-```powershell
-New-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Force | Out-Null
-Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Updater" -Value "C:\Users\Public\beacon.exe"
-```
-
-The entry pointing at `C:\Users\Public\` should fire with `risk=HIGH`. Clean up afterward:
+Tested end-to-end via Caldera Manual Command on 2026-08-30:
 
 ```powershell
-Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Updater"
+New-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Force | Out-Null; Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Updater2" -Value "C:\Users\Public\evil.exe"
 ```
+
+The scheduled alert fired (High severity). The triggering event showed `Details=C:\Users\Public\evil.exe`, `Image=...\powershell.exe`, `TargetObject=...\CurrentVersion\Run\Updater2`. Confirmed chain:
+
+**Caldera (Manual Command) → PowerShell on the target → Registry Run key → Sysmon (Event ID 13) → Splunk → Alert.**
 
 ## Tuning notes
 
-- Legitimate software does write Run keys at install time. If a known-good app shows up repeatedly as `REVIEW`, add its `Details` value to an exclusion so only genuinely new entries surface.
-- The `HIGH` tier is the one to page on; `REVIEW` is for daily triage.
+- Legitimate software writes Run keys at install time, but its values point into `Program Files` and so are filtered out. If a known-good app ever writes into AppData/ProgramData and trips the rule, add its `Details` value to an exclusion.
+- The throttle is keyed on `TargetObject`, so the same autorun entry won't re-alert within the hour, but any new or different entry still fires.

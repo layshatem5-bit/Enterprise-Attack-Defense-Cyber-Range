@@ -15,8 +15,10 @@ This rule keys on two strong signals: the **GrantedAccess** mask matching the ri
 
 ## Search
 
+> Note: Sysmon data is indexed under the sourcetype `XmlWinEventLog`, and `EventCode=10` is emitted only by Sysmon — so the rule keys on `EventCode=10`. (Same sourcetype fix that rule 01 needed after live testing.)
+
 ```spl
-index=main sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=10
+index=main EventCode=10
 TargetImage="*\\lsass.exe"
 NOT SourceImage IN (
     "C:\\Windows\\System32\\wininit.exe",

@@ -66,9 +66,15 @@ Four detection rules are built for the Splunk SIEM, spanning four different atta
 
 ## Status
 
-Base lab complete: AD stood up, network fully segmented, Sysmon on all Windows hosts, Splunk collecting Windows/firewall/Ubuntu logs, dashboard live, and Caldera proven end to end (a Registry persistence technique executed and confirmed as Sysmon Event ID 13 in Splunk). First detection rules written and mapped to ATT&CK.
+Base lab complete: AD stood up, network fully segmented, Sysmon on all Windows hosts, Splunk collecting Windows/firewall/Ubuntu logs, dashboard live, and Caldera proven end to end.
 
-Next: run each detection through the purple-team loop (execute the technique, confirm the alert fires, close any gap), then build out full attack scenarios (APT emulation, ransomware, insider threat), each documented as its own Incident Response report.
+**Detection 01 (Registry Run Key Persistence) is deployed as a live scheduled alert and validated through the full purple-team loop** — a technique run from Caldera fired the alert automatically in Splunk (Caldera → PowerShell → Registry → Sysmon → Splunk → Alert). Rules 02–04 are written and ready to deploy the same way.
+
+Next: deploy and validate rules 02–04, standardise host naming (see below), then build out full attack scenarios (APT emulation, ransomware, insider threat), each documented as its own Incident Response report.
+
+### Known cleanup item — host naming
+
+The same machine currently reports to Splunk under two names (its real computer name and a forwarder-set friendly name), and the friendly labels don't line up cleanly with the VMware library labels. It doesn't affect detection, but each host should be standardised to one consistent name across the forwarder, Caldera, and VMware.
 
 ## Security note
 
