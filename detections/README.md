@@ -7,7 +7,7 @@ Detection content for the lab's Splunk SIEM. Each rule targets a specific attack
 | 01 | [Registry Run Key Persistence](01-registry-run-key-persistence.md) | Persistence | T1547.001 | Sysmon EID 13 | High | **Deployed & validated** |
 | 02 | [Suspicious / Encoded PowerShell](02-suspicious-powershell.md) | Execution, Defense Evasion | T1059.001, T1027 | Sysmon EID 1 | High | **Deployed & validated** |
 | 03 | [LSASS Credential Access](03-lsass-credential-access.md) | Credential Access | T1003.001 | Sysmon EID 10 | Critical | **Deployed & validated** |
-| 04 | [Privileged Group Modification](04-privileged-group-modification.md) | Privilege Escalation, Persistence | T1098, T1078.002 | Windows Security 4728/4732/4756 | High | Ready |
+| 04 | [Privileged Group Modification](04-privileged-group-modification.md) | Privilege Escalation, Persistence | T1098, T1078.002 | Windows Security 4728/4732/4756 | High | **Deployed & validated** |
 
 ## Turning a search into an alert in Splunk
 
@@ -40,6 +40,13 @@ These rules are meant to be *tested*, not just saved:
 
 - **GrantedAccess is case-sensitive in Splunk string comparisons.** Sysmon logs it uppercase (e.g. `0x1FFFFF`); a filter list written in lowercase silently drops real matches. Always `lower()` a raw Windows field before comparing it against a literal list — this bit both rule 01 (registry paths) and rule 03 (access masks).
 - **PowerShell routinely opens a handle to `lsass.exe`** with a weak access mask (`0x1410`) and an `UNKNOWN` frame in `CallTrace`, purely from resolving a SID to a username. This is confirmed-benign baseline noise on every host — a naive "any access mask + unknown callstack" rule pages constantly. Rule 03 only trusts the weak-mask/unknown-callstack combination when the source process is *not* PowerShell; a genuinely dump-capable access mask still alerts regardless of source.
+
+## Environment notes learned while deploying (round 2)
+
+- **Detection 01 had a second false-positive round after going live**: OneDrive (both the installer and the client itself) legitimately writes autostart entries from AppData, tripping the same filter meant to catch attacker payloads. Fixed with an image-name exclusion regex. General lesson: a rule passing its first live test isn't the end of tuning — watch it for the first few days for exactly this kind of legitimate-software noise.
+- **Detection 04 hit the same sourcetype trap as 01 and 03**: the real sourcetype for Windows Security events is plain `WinEventLog`, not `WinEventLog:Security`. `LogName=Security` is the correct way to isolate the channel once the sourcetype stops encoding it.
+- **Windows Security log messages can repeat the same field label in different sections** (e.g. "Account Name:" appears once for the Subject/who-did-it and once for the Member/who-was-added), which breaks naive automatic field extraction. `rex` anchored to each section header (`Subject:`, `Group:`, `Member:`) is the reliable fix.
+- **Auditing has to be explicitly enabled**: Windows Server doesn't log security-group-membership changes (Event IDs 4728/4732/4756) unless the "Security Group Management" audit subcategory is turned on (`auditpol /set /subcategory:"Security Group Management" /success:enable`).
 
 ## Recommended add-ons
 

@@ -68,9 +68,9 @@ Four detection rules are built for the Splunk SIEM, spanning four different atta
 
 Base lab complete: AD stood up, network fully segmented, Sysmon on all Windows hosts, Splunk collecting Windows/firewall/Ubuntu logs, dashboard live, and Caldera proven end to end.
 
-**Detections 01 (Registry Run Key Persistence), 02 (Suspicious / Encoded PowerShell) and 03 (LSASS Credential Access) are deployed as live scheduled alerts and validated through the full purple-team loop** — a technique run from Caldera fires the alert automatically in Splunk (Caldera → PowerShell/tool → Registry, encoded command, or LSASS access → Sysmon → Splunk → Alert). Rule 02 also surfaces the C2 origin: its `ParentImage` chain showed the Caldera agent (`sandcat.exe`) spawning the encoded PowerShell. Rule 03 needed a second fix after live testing: Splunk's case-sensitive string comparison silently dropped the real procdump event until `GrantedAccess` was lowercased, and a confirmed-benign PowerShell/LSASS baseline (routine SID lookups) had to be excluded to stop constant false positives. Rule 04 is written and ready to deploy the same way.
+**All four detections (Registry Run Key Persistence, Suspicious/Encoded PowerShell, LSASS Credential Access, and Privileged Group Modification) are deployed as live scheduled alerts and validated through the full purple-team loop** — a technique run from Caldera or PowerShell fires the alert automatically in Splunk (attacker action → Sysmon or Windows Security log → Splunk → Alert). Each rule needed at least one fix after being tested against real data — a case-sensitivity bug, a wrong assumed sourcetype, a field-name collision, or a legitimate-software false positive — and each is documented in its own file under `detections/`. Rule 02 also surfaced the C2 origin: its `ParentImage` chain showed the Caldera agent (`sandcat.exe`) spawning the encoded PowerShell.
 
-Next: deploy and validate rule 04, standardise host naming (see below), then build out full attack scenarios (APT emulation, ransomware, insider threat), each documented as its own Incident Response report.
+Next: standardise host naming (see below), then build out full attack scenarios (APT emulation, ransomware, insider threat), each documented as its own Incident Response report.
 
 ### Known cleanup item — host naming
 

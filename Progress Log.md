@@ -41,10 +41,19 @@ The project in order — what was built, what broke, and how it was fixed. Each 
 - Started the **host-naming cleanup** (same machine was reporting under two names).
 - Cleaned up the test artifacts (removed the fake Run keys, deleted LSASS dump files).
 
+
+## 2026-08-31 — Detection 04 deployed, and a round of post-deployment tuning
+
+- **Deployed & validated Detection 04 (Privileged Group Modification)** by adding a test account to Domain Admins on the DC and confirming the alert fired. → [04](detections/04-privileged-group-modification.md)
+  - Hit the same sourcetype trap as rules 01/03: the real sourcetype is plain `WinEventLog`, not `WinEventLog:Security` — used `LogName=Security` instead.
+  - Found a field-name collision: the raw Windows Security message uses "Account Name:" twice (once for who made the change, once for who was added), which breaks naive auto-extraction. Fixed by extracting each value with `rex` anchored to its own message section (`Subject:` / `Group:` / `Member:`).
+  - Also had to explicitly enable the "Security Group Management" audit subcategory (`auditpol`) and fix an inconsistent `host` value in the DC's `inputs.conf` `[default]` stanza before the events would even reach Splunk correctly.
+- **Detection 01 needed a second round of tuning after running live for a day**: both `OneDriveSetup.exe` and `OneDrive.exe` legitimately write autostart entries from AppData, which tripped the rule as a false positive. Fixed with an image-name exclusion. Lesson: passing the first live test doesn't mean a rule is done — watch it for a few days for this kind of noise from ordinary software.
+- All four detections are now deployed and validated end-to-end.
+
 ---
 
 ## ⬜ Next up
 
-- Deploy & validate Detection **04 (Privileged Group)**.
 - Finish host-naming standardization.
 - Build full purple-team scenarios (APT emulation, ransomware, insider threat), each written up as an **Incident Response report**.

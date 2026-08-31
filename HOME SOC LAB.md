@@ -16,7 +16,7 @@ A segmented VMware lab: Active Directory behind an OPNsense firewall, Windows en
 - ✅ Detection **01** (Registry Persistence) — deployed & validated
 - ✅ Detection **02** (Encoded PowerShell) — deployed & validated
 - ✅ Detection **03** (LSASS Credential Access) — deployed & validated
-- ⬜ Detection **04** (Privileged Group) — ready
+- ✅ Detection **04** (Privileged Group Modification) — deployed & validated
 - ⬜ Host-naming cleanup
 - ⬜ Full purple-team scenarios + IR reports
 
@@ -44,7 +44,7 @@ A segmented VMware lab: Active Directory behind an OPNsense firewall, Windows en
 - [01 — Registry Run Key Persistence](detections/01-registry-run-key-persistence.md) ✅
 - [02 — Suspicious / Encoded PowerShell](detections/02-suspicious-powershell.md) ✅
 - [03 — LSASS Credential Access](detections/03-lsass-credential-access.md) ✅
-- [04 — Privileged Group Modification](detections/04-privileged-group-modification.md)
+- [04 — Privileged Group Modification](detections/04-privileged-group-modification.md) ✅
 
 ## 📓 Journal
 

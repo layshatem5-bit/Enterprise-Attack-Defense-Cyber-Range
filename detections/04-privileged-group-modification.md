@@ -6,6 +6,7 @@
 | Tactic | Privilege Escalation, Persistence |
 | Data source | Windows Security log — `index=main` (logged on the Domain Controller) |
 | Severity | High |
+| Status | **Deployed and validated end-to-end (2026-08-31)** |
 
 ## What it detects
 
@@ -13,22 +14,29 @@ Once an attacker has a foothold, adding an account they control to **Domain Admi
 
 In a real environment, someone joining Domain Admins should be a known, ticketed change. Anything that isn't is either a mistake or an intrusion — both worth an alert.
 
-## Search
+## Lessons from validating against live data
+
+The original draft assumed Splunk would auto-parse this event into clean fields (`Group_Name`, `Member_Name`, `Account_Name`) with a `WinEventLog:Security` sourcetype. Neither held up once tested against a real event:
+
+1. **Sourcetype.** The real sourcetype is just `WinEventLog` (not `WinEventLog:Security`) — the same class of bug rules 01 and 03 hit. `LogName=Security` is used instead to isolate the Security channel, since the generic sourcetype no longer encodes which log it came from.
+2. **Field-name collision.** The raw Windows message text uses the label **"Account Name:"** twice — once under `Subject` (who made the change) and once under `Member` (who was added) — so Splunk's automatic key/value extraction produces an unreliable, potentially multivalued field instead of two distinct ones. The fix is to skip automatic extraction and pull each value directly out of `_raw` with `rex`, anchored to the `Subject:` / `Group:` / `Member:` section headers in the message text so each regex only matches within its own section.
+
+## Search (deployed alert)
 
 ```spl
-index=main sourcetype="WinEventLog:Security" (EventCode=4728 OR EventCode=4732 OR EventCode=4756)
-Group_Name IN ("Domain Admins","Enterprise Admins","Administrators","Schema Admins","Account Operators","Backup Operators","Server Operators")
-| stats min(_time) as firstTime max(_time) as lastTime count by host, EventCode, Group_Name, Member_Name, Account_Name
-| rename Group_Name AS group, Member_Name AS account_added, Account_Name AS performed_by
+index=main sourcetype="WinEventLog" LogName=Security (EventCode=4728 OR EventCode=4732 OR EventCode=4756)
+| rex field=_raw "(?s)Subject:.*?Account Name:\s+(?<performed_by>\S+)"
+| rex field=_raw "(?s)Group:.*?Group Name:\s+(?<group>[^\r\n]+)"
+| rex field=_raw "(?s)Member:.*?Account Name:\s+(?<account_added>[^\r\n]+)"
+| where group IN ("Domain Admins","Enterprise Admins","Administrators","Schema Admins","Account Operators","Backup Operators","Server Operators")
+| stats min(_time) as firstTime max(_time) as lastTime count by host, EventCode, group, account_added, performed_by
 | convert ctime(firstTime) ctime(lastTime)
 | sort - lastTime
 ```
 
-`account_added` is who was put into the group; `performed_by` is the account that made the change.
+`account_added` is who was put into the group (as a full distinguished name, e.g. `CN=Ali Ali,OU=Standart Users,DC=laith,DC=local`); `performed_by` is the account that made the change.
 
-> **Field-name note:** the Windows Security log's field names depend on how the events are parsed. If `Group_Name` / `Member_Name` don't populate, run the base search (`index=main sourcetype="WinEventLog:Security" EventCode=4728`), open one event, and read the exact field names off it. The clean fix is to render these events as XML — add `renderXml=true` under the `[WinEventLog://Security]` stanza in `inputs.conf` on the DC, which gives stable fields (`TargetUserName` = group, `MemberName` = account added, `SubjectUserName` = performed by). Installing the **Splunk Add-on for Microsoft Windows** normalizes them too.
-
-## Alert configuration
+## Alert configuration (as deployed)
 
 | Setting | Value |
 |---|---|
@@ -37,20 +45,28 @@ Group_Name IN ("Domain Admins","Enterprise Admins","Administrators","Schema Admi
 | Time range | Last 10 minutes |
 | Trigger | Number of results > 0 |
 | Throttle | By `group`, `account_added` for 1 hour |
+| Action | Add to Triggered Alerts, Severity **High** |
 
-## How to test
+## Validation
 
-On the DC, add a test user to Domain Admins, then remove it:
+Tested end-to-end on the Domain Controller on 2026-08-31:
 
 ```powershell
 Add-ADGroupMember -Identity "Domain Admins" -Members user1
-# verify the alert fired, then clean up:
-Remove-ADGroupMember -Identity "Domain Admins" -Members user1 -Confirm:$false
 ```
 
-Event ID 4728 should appear on the DC and the rule should fire naming `user1` as `account_added`.
+Event ID 4728 was logged immediately with `Group Name: Domain Admins`, `Member: Account Name: CN=Ali Ali,OU=Standart Users,DC=laith,DC=local`, and `Subject: Account Name: Administrator`. The alert fired correctly and named the added account. Confirmed chain:
+
+**PowerShell (`Add-ADGroupMember`) on the DC → AD group membership change → Windows Security log (Event ID 4728) → Splunk → Alert.**
+
+The test account was removed immediately after confirming the alert:
+
+```powershell
+Remove-ADGroupMember -Identity "Domain Admins" -Members user1 -Confirm:$false
+```
 
 ## Tuning notes
 
 - Keep a short allowlist of accounts that are *supposed* to perform these changes (your break-glass admin). An addition performed by anything outside that list is the higher-severity case.
-- This rule depends on the DC forwarding its Security log to Splunk — which the Universal Forwarder already does via the `[WinEventLog://Security]` input. If it ever goes quiet, confirm the forwarder on the DC is still running.
+- This rule depends on the DC forwarding its Security log to Splunk via the `[WinEventLog://Security]` input. It also depends on Windows actually auditing this activity — confirm with `auditpol /get /subcategory:"Security Group Management"` and enable it with `auditpol /set /subcategory:"Security Group Management" /success:enable` if it isn't already.
+- If the DC's `inputs.conf` `[default]` stanza has a `host` value that differs from what other log sources use (this happened here — one stanza had a stray, inconsistent host name), Security-log events will index under a different host than expected. Keep `host` consistent across all stanzas for the same machine.
